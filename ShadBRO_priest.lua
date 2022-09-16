@@ -1,4 +1,6 @@
-
+-- /dump GetSpellInfo(15286)
+-- /dump IsUsableSpell(15286)
+-- /dump IsSpellKnown(15286)
 ShadowWordPainId = 25368 --"Shadow Word: Pain"
 Spell_priest_shadowWordPain = {
     SpellId     = 25368,
@@ -62,6 +64,16 @@ Spell_priest_mindFlay = {
     Priority = 4
 }
 
+Spell_priest_shadowWeaving = {
+    SpellId  = 15332,
+    AuraId   = 15258,
+    Enabled  = true,
+    IsKnown  = false,
+    IsDot    = false,
+    IsAura   = true,
+    texture  = {},
+    Priority = 10
+}
 
 -- All lists indexed by spell key.
 Shadbro.SpellList       = {}
@@ -74,7 +86,7 @@ function LoadPriestSpells()
     LoadSpell(Spell_priest_vampiricTouch)
     LoadSpell(Spell_priest_devouringPlague)
     LoadSpell(Spell_priest_vampiricEmpbrace)
-
+    LoadSpell(Spell_priest_shadowWeaving)
 end
 
 function LoadSpell(Spell)
@@ -84,20 +96,36 @@ function LoadSpell(Spell)
     Shadbro.SpellTextures[Spell.SpellId]   = GetSpellTexture(Spell.SpellId)
     Shadbro.SpellList[Spell.SpellId]       = Spell
     Shadbro.Priority[Spell.Priority]       = Spell.SpellId
-    Spell.ActionButton =                        C_ActionBar.FindSpellActionButtons(Spell.SpellId)
+    Spell.ActionButton = C_ActionBar.FindSpellActionButtons(Spell.SpellId)
     if Spell.ActionButton then
         sbd:log_debug('Value:', Shadbro.SpellList[Spell.SpellId].Name, "Action Button: ", Spell.ActionButton[1])
     end
 end
 
 function DecideTicks()
-
+-- /dump GetSpellInfo(15332)
+-- /dump GetSpellSubtext(15332)
 end
 
 function IterateSpells()
     for key,value in pairs(Shadbro.spellsList) do --pseudocode
         sbd:log_debug(Shadbro.spellsNames[key], " Cast Time: ", Shadbro.castTime[key])
     end
+end
+
+function GetSpellState(self)
+    if not self or not self:GetState() then
+        return
+    end
+    self:GetState()
+end
+
+local STATE_UNKNOWN = "STATE_UNKNOWN"
+local STATE_DISABLED = "STATE_DISABLED"
+
+
+function Spell_priest_shadowWordPain:GetState()
+    sbd:log_debug("GetState: ", Spell_priest_shadowWordPain.Name)
 end
 
 function UpdateTargetDots()

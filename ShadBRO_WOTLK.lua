@@ -9,13 +9,15 @@ local version = GetAddOnMetadata(title, "Version")
 --
 
 sbd:set_debug(true)
-
 local LCG = LibStub("LibCustomGlow-1.0")
 
 -- Our base array
-Shadbro = {}
-Shadbro.events = {}
+Shadbro             = {}
+Shadbro.events      = {}
 Shadbro.textureList = {}
+Shadbro.targetAuras = {}
+Shadbro.playerAuras = {}
+
 Shadbro.GetNext = function ()
     sbd:log_debug('empty')
 end
@@ -61,7 +63,6 @@ end
 
 function Shadbro.events.UNIT_SPELLCAST_CHANNEL_STOP(unitTarget, castGUID, spellID)
     sbd:log_debug('event: UNIT_SPELLCAST_CHANNEL_STOP')
-
 end
 
 function Shadbro.events.PLAYER_LOGIN()
@@ -73,7 +74,7 @@ function Shadbro.events.PLAYER_LOGIN()
 end
 
 function Shadbro.events.ADDON_LOADED(addon)
-    if addon ~= "ShadBRO" then
+    if addon ~= "FaceMelterWotlk" then
         return
     end
 
@@ -104,9 +105,11 @@ function Shadbro.events.COMBAT_LOG_EVENT_UNFILTERED(...)
         -- print(CombatLogGetCurrentEventInfo())
         if event == "SPELL_CAST_START" then
             sbd:log_debug('event: SPELL_CAST_START')
+            Shadbro:PushChanges()
         elseif event == "SPELL_DAMAGE" then
             -- spellId, spellName, spellSchool, amount, overkill, school, resisted, blocked, absorbed, critical, glancing, crushing, isOffHand = select(12, ...)
             sbd:log_debug('event: SPELL_DAMAGE', ' name: ', spellName, ' dstGUID:', dstGUID)
+            Shadbro:PushChanges()
         elseif event == "SPELL_AURA_APPLIED" then
             -- sbd:log_debug('event: SPELL_AURA_APPLIED', ' name: ', spellName, ' dstGUID:', dstGUID)
             TargetAuraAdd(dstGUID, spellId)
@@ -115,8 +118,10 @@ function Shadbro.events.COMBAT_LOG_EVENT_UNFILTERED(...)
             Shadbro.FindNextSpell()
         elseif event == "SPELL_AURA_APPLIED_DOSE" then
             -- sbd:log_debug('event: SPELL_AURA_APPLIED_DOSE', ' name: ', spellName, ' dstGUID:', dstGUID)
+            Shadbro:PushChanges()
         elseif event == "SPELL_AURA_REFRESH" then
             sbd:log_debug('event: SPELL_AURA_REFRESH', ' name: ', spellName, ' dstGUID:', dstGUID)
+            Shadbro:PushChanges()
         elseif event == "SPELL_AURA_REMOVED" then
             -- sbd:log_debug('event: SPELL_AURA_REMOVED', ' name: ', spellName, ' dstGUID:', dstGUID)
             TargetAuraRemove(dstGUID, spellId)
@@ -145,31 +150,80 @@ end
 
 function Shadbro.events.PLAYER_TARGET_CHANGED(...)
     sbd:log_debug('event: PLAYER_TARGET_CHANGED')
-
+    Shadbro:RefreshPlayerAuras()
+    Shadbro:RefreshTargetAuras()
     -- target changed, set last target, update current target, will be nil if no target
-    if UnitName("target") == nil or UnitIsFriend("player", "target") == true or UnitHealth("target") == 0 then
-        return
-    end
-    Shadbro.FindNextSpell()
-    Shadbro:PushChanges()
+    -- if UnitName("target") == nil or UnitIsFriend("player", "target") == true or UnitHealth("target") == 0 then
+    --     return
+    -- end
+    -- Shadbro.FindNextSpell()
+    -- Shadbro:PushChanges()
 end
 
 Shadbro.TargetList = {}
+function Shadbro.ResetTargetAuras()
+end
 
-function TargetAuraAdd(targetGuid, spellId)
-    local expirationTime = Shadbro.GetDotExpiration(spellId)
-    if not expirationTime then
-        return
+local MAX_PLAYER_AURAS          = 40
+Shadbro.playerAura              = {}
+
+local function refreshAura(auraList, target, isHelpful)
+    local auraType = "HELPFUL"
+    if isHelpful == false then
+        auraType = "HARMFUL"
     end
-    if not Shadbro.TargetList[targetGuid] then
-        Shadbro.TargetList[targetGuid] = {}
+    for i=1, MAX_PLAYER_AURAS do 
+        local name, icon, count, dispelType, duration, expirationTime, source, isStealable, nameplateShowPersonal, spellId, canApplyAura= UnitAura(target,i, auraType)
+        if name then
+            local playAura              = {}
+            playAura.name               = name
+            playAura.icon               = icon
+            playAura.dispelType         = dispelType
+            playAura.duration           = duration
+            playAura.count              = count
+            playAura.expirationTime     = expirationTime
+            playAura.source             = source
+            playAura.isStealable        = isStealable
+            playAura.canApplyAura       = canApplyAura
+            auraList[spellId] = playAura
+        else
+            break
+        end
+    end
+end
+
+function Shadbro:RefreshPlayerAuras()
+    sbd:log_debug('event: PLAYER_TARGET_CHANGED')
+    Shadbro.ResetPlayerAuras()
+
+    refreshAura(Shadbro.playerAuras, "player", true)
+
+    -- for Key,Value in pairs(Shadbro.playerAuras) do
+    --     if Value then
+    --         sbd:log_debug('event: AddedPlaterAura: ', Value.name, ' Count: ', Value.count, ' Expiration: ', Value.expirationTime, ' Source: ', Value.source)
+    --     end
+    -- end
+end
+
+function Shadbro.ResetPlayerAuras()
+    Shadbro.playerAura         = {}
+end
+
+Shadbro.targetAuras              = {}
+function Shadbro:RefreshTargetAuras()
+    sbd:log_debug('event: PLAYER_TARGET_CHANGED')
+    table.wipe(Shadbro.targetAuras)
+    refreshAura(Shadbro.targetAuras, "target", false)
+    for Key,Value in pairs(Shadbro.targetAuras) do
+        if Value then
+            sbd:log_debug('event: AddedPlaterAura: ', Value.name, ' Count: ', Value.count, ' Expiration: ', Value.expirationTime, ' Source: ', Value.source)
+        end
     end
 
-    if not Shadbro.TargetList[targetGuid].Auras then 
-        Shadbro.TargetList[targetGuid].Auras = {}
-    end
+end
 
-    Shadbro.TargetList[targetGuid].Auras[spellId] = expirationTime
+function Shadbro.ResetTargetAuras()
+    Shadbro.targetAuras         = {}
 end
 
 function TargetAuraUpdate(targetGuid, spellId)
@@ -202,39 +256,146 @@ function TargetAuraRemove(targetGuid, spellId)
 
 end
 
-function TargetAuraIsPresent(targetGuid, spellId)
-    sbd:log_debug('event: TargetAuraIsPresent', ' name: ', spellId, ' dstGUID:', targetGuid, 'current: ',GetTime(), ' expiration:')
-    if not Shadbro.TargetList[targetGuid] then
-        sbd:log_debug('no guid', targetGuid,'C_Timer' ,spellId)
-        return false
-    end
-    if not Shadbro.TargetList[targetGuid].Auras or not Shadbro.TargetList[targetGuid].Auras[spellId] then
-        sbd:log_debug('no aura')
-        return false
-    end
 
-    sbd:log_debug('event: TargetAuraIsPresent', ' name: ', spellId, ' dstGUID:', targetGuid, 'current: ',GetTime(), ' expiration:')
-    return Shadbro.TargetList[targetGuid].Auras[spellId] - GetTime() > 0
-    -- sbd:log_debug('event: SPELL_AURA_REMOVED', ' name: ', spellId, ' dstGUID:', targetGuid, 'current: ',GetTime())
-
-end
 
 function Shadbro.FindNextSpell()
     print("FindNextSpell")
     Shadbro:PushChanges()
+    Shadbro.UpdatePlayerAuras()
     local targetGuid = UnitGUID("target")
-    for Key,Value in pairs(Shadbro.Priority) do --pseudocode
+    for Key,Value in pairs(Shadbro.Priority) do 
         -- id := Value.SpellId
         if Shadbro.SpellList[Value].IsDot == true then
             -- This one checks if it's a dot and we have an aura ready to go
             if TargetAuraIsPresent(targetGuid, Value) == false then
-                sbd:log_debug('NextSpell:', Shadbro.SpellList[Value].Name)
+                sbd:log_debug('NextSpell:', Shadbro.SpellList[Value].SpellId)
                 return
             end
 
             -- Check to see if regular spell
         end
     end
+end
+
+function TargetAuraIsPresent(targetGuid, auraId)
+    print("PlayerAuraIsPresent")
+    for i=1,40 do 
+        local name, _, count, _, _, _, _, _, _, spellId = UnitAura("target",i,"HARMFUL")
+        if name then
+            sbd:log_debug('TargetReqSpell:', auraId, ' Count: ', count,  'Spell ID', spellId)
+            if spellId == auraId then
+                sbd:log_debug('ReqSpellFound:', auraId, ' Count: ', count)
+                return true
+            end
+            
+        else
+            -- nil, quit looking
+            return false
+        end
+    end
+    return false
+end
+
+
+function PlayerAuraIsPresent(auraId)
+    print("PlayerAuraIsPresent")
+    for i=1,40 do 
+        local name, _, count, _, _, _, _, _, _, spellId = UnitBuff("player",i)
+        if name then
+            sbd:log_debug('ReqSpell:', auraId, ' Count: ', count,  'Spell ID', spellId)
+            if spellId == auraId then
+                sbd:log_debug('ReqSpellFound:', auraId, ' Count: ', count)
+                if count then 
+                    return count
+                end
+                return 1
+            end
+            
+        else
+            return 0
+        end
+    end
+end
+
+
+
+
+
+function Shadbro.UpdatePlayerAuras()
+    print("UpdatePlayerAuras")
+
+    local spellBonus = GetSpellBonusDamage(6)
+    local count = PlayerAuraIsPresent(Spell_priest_shadowWeaving.AuraId)
+
+    sbd:log_debug('Aura:', Shadbro.SpellList[Spell_priest_shadowWeaving.SpellId], " count: ", count)
+    sbd:log_debug('SpellExpectedTick:', (spellBonus + 1575) / 7)
+
+end
+
+
+local function SetNext(self, spellId)
+    if not self._PixelGlow then
+        return
+    end
+
+    local r,color,N,frequency,length,th,xOffset,yOffset,border,key,frameLevel
+    frameLevel = 8
+    key = spellId
+    LCG.PixelGlow_Start(Shadbro.displayFrame_next, color,N,frequency,length,th,xOffset,yOffset,border,key,frameLevel)
+
+    
+end
+
+local NUM_GLYPH_SLOTS = 6
+
+local function UpdateCharacterInfo()
+    for i=1,NUM_GLYPH_SLOTS  do
+        local enabled, glyphType, glyphTooltipIndex, glyphSpellID, icon = GetGlyphSocketInfo(i)
+        if enabled then
+            sbd:log_debug('function: UpdateCharacterInfo Slot: ', i, ' Glyph: ', glyphSpellID, 'TT: ', glyphTooltipIndex, 'Type:', GetSpellInfo(glyphSpellID))
+        end
+    end
+
+end
+
+
+local function UnsetNext(self, spellId)
+    if not self._PixelGlow then
+        return
+    end
+
+    LCG.PixelGlow_Stop(self, spellId)
+end
+
+
+function TargetAuraDuration(auraId)
+    print("PlayerAuraIsPresent")
+    for i=1,40 do 
+        local name, _, count, _, duration, expirationTime, _, _, _, spellId = UnitAura("target",i,"HARMFUL")
+        if name then
+            if spellId == auraId then
+                local startTime = expirationTime - duration
+                sbd:log_debug('function: TargetAuraDuration. StartTime: ', startTime, 'expirationTime', expirationTime)
+                return startTime, duration
+            end
+            
+        else
+            -- nil, quit looking
+            return 0, 0
+        end
+    end
+    return 0, 0
+end
+
+function UpdateButton(spellId)
+    local startTime, duration = TargetAuraDuration(spellId)
+    if duration == 0 then
+        Shadbro.cd[spellId]:Clear()
+        return
+    end
+    sbd:log_debug('function: TargetAuraDuration. StartTime: ', startTime, 'expirationTime', duration, ' current ', GetTime())
+    Shadbro.cd[spellId]:SetCooldown(startTime, duration)
+    GetSpellState(Shadbro.SpellList[spellId])
 end
 
 function Shadbro:PushChanges()
@@ -244,27 +405,113 @@ function Shadbro:PushChanges()
     local Value = Shadbro.SpellList[Spell_priest_shadowWordPain.SpellId]
     if TargetAuraIsPresent(targetGuid, Spell_priest_shadowWordPain.SpellId) == false then
         sbd:log_debug('function: TargetAuraIsPresent false')
-        -- LCG.PixelGlow_Start(Shadbro.displayFrame_next)
-        local r,color,N,frequency,length,th,xOffset,yOffset,border,key,frameLevel
-        frameLevel = 8
-        key = "ham"
-        LCG.PixelGlow_Start(Shadbro.displayFrame_next, color,N,frequency,length,th,xOffset,yOffset,border,key,frameLevel)
+        Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId]:SetAllPoints()
+        Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId]:SetDesaturation(0)
+        SetNext(Shadbro.displayFrame_next, Spell_priest_shadowWordPain.SpellId)
+        UpdateCharacterInfo()
+        UpdateButton(Spell_priest_shadowWordPain.SpellId)
     else
-        sbd:log_debug('function: TargetAuraIsPresent true')
+
+        -- Shadbro.displayFrame_next:SetFontString(t)
+        -- local t = Shadbro.displayFrame_next:CreateTexture(nil, "BACKGROUND")
+        Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId]:SetAllPoints()
+        Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId]:SetDesaturation(.9)
         
-        local r,color,N,frequency,length,th,xOffset,yOffset,border,key,frameLevel
-        frameLevel = 8
-        key = "ham"
-        LCG.PixelGlow_Stop(Shadbro.displayFrame_next, key)
-        -- Shadbro.displayFrame_next:SetText("ham")
+
+        sbd:log_debug('function: TargetAuraIsPresent true')
+        -- local r,color,N,frequency,length,th,xOffset,yOffset,border,key,frameLevel
+        -- frameLevel = 8
+        -- key = Spell_priest_shadowWordPain.SpellId
+        -- LCG.PixelGlow_Stop(Shadbro.displayFrame_next, key)
+        UnsetNext(Shadbro.displayFrame_next, Spell_priest_shadowWordPain.SpellId)
+        UpdateButton(Spell_priest_shadowWordPain.SpellId)
+        -- Shadbro.cd[Spell_priest_shadowWordPain.SpellId]:SetCooldown(0, 0)
+
+
     end
+end
+
+Shadbro.cd = {}
+
+Shadbro.text_ture = {}
+
+function Shadbro:CreateBar()
+    sbd:log_debug('function: CreateGUI')
+
+    local displayFrame = CreateFrame("Frame", "ShadbroDisplayFrame", UIParent, "BackdropTemplate")
+    displayFrame:SetFrameStrata("BACKGROUND")
+    displayFrame:SetWidth(250)
+    displayFrame:SetHeight(50)
+    displayFrame:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        tile = true,
+        tileSize = 32
+    })
+    displayFrame:SetBackdropColor(0, 0, 0, .4)
+    displayFrame:EnableMouse(true)
+    displayFrame:SetMovable(true)
+    displayFrame:SetClampedToScreen(true)
+    displayFrame:SetScript("OnMouseDown", function(self)
+        sbd:log_debug('event: displayFrame: OnMouseDown')
+        self:StartMoving()
+    end)
+    displayFrame:SetScript("OnMouseUp", function(self)
+        sbd:log_debug('event: displayFrame: OnMouseUp')
+        self:StopMovingOrSizing()
+    end)
+    displayFrame:SetScript("OnDragStop", function(self)
+        sbd:log_debug('event: displayFrame: OnDragStop')
+        self:StopMovingOrSizing()
+    end)
+    displayFrame:SetPoint("CENTER", -200, -200)
+    displayFrame:Show()
+
+    Shadbro:AddChild(displayFrame, 40, 0, Spell_priest_shadowWordPain.SpellId)
+end
+
+
+
+function Shadbro:AddChild(parentDisplayFrame, size, offset, spellId)
+    local margin = 2
+
+    sbd:log_debug('function: CreateGUI', Shadbro.SpellList[Spell_priest_shadowWordPain.SpellId].Name, "name")
+
+    DisplayFrame_next = CreateFrame("Button", nil, parentDisplayFrame, "SecureActionButtonTemplate")
+    DisplayFrame_next:SetWidth(size)
+    DisplayFrame_next:SetHeight(size)
+    DisplayFrame_next:SetPoint("TOPLEFT", offset * size + margin + offset * margin, -margin )
+
+    Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId] = DisplayFrame_next:CreateTexture(nil, "BACKGROUND")
+    -- t:SetTexture(nil)
+    Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId]:SetAllPoints(DisplayFrame_next)
+    Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId]:SetTexture(Shadbro.SpellTextures[Spell_priest_shadowWordPain.SpellId])
+    Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId]:SetDesaturation(.9)
+    DisplayFrame_next:SetNormalTexture(Shadbro.text_ture[Spell_priest_shadowWordPain.SpellId])
+
+    -- key = spellId
+    DisplayFrame_next["_PixelGlow"] = spellId
+
+    DisplayFrame_next:SetAttribute("type","spell");-- Set type to "macro"
+
+    DisplayFrame_next:SetAttribute("spell", Shadbro.SpellList[Spell_priest_shadowWordPain.SpellId].Name);-- Set our macro text
+
+    local t = DisplayFrame_next:CreateFontString("test", "OVERLAY", "GameTooltipText")
+    t:SetPoint("CENTER", 0, 0)
+    t:SetText("")
+    DisplayFrame_next:SetFontString(t)
     
+    Shadbro.cd[Spell_priest_shadowWordPain.SpellId] = CreateFrame("Cooldown", "myCooldown", DisplayFrame_next, "CooldownFrameTemplate")
+    Shadbro.cd[Spell_priest_shadowWordPain.SpellId]:SetAllPoints()
+    Shadbro.cd[Spell_priest_shadowWordPain.SpellId]:SetCooldown(0, 0)
     
+    Shadbro.displayFrame_next = DisplayFrame_next
 end
 
 function Shadbro:CreateGUI()
     sbd:log_debug('function: CreateGUI')
-
+Shadbro:CreateBar()
+    end
+    function Shadbro:CreateGUI3()
     local displayFrame = CreateFrame("Frame", "ShadbroDisplayFrame", UIParent, "BackdropTemplate")
     displayFrame:SetFrameStrata("BACKGROUND")
     displayFrame:SetWidth(250)
@@ -301,22 +548,15 @@ function Shadbro:CreateGUI()
     displayFrame:SetPoint("CENTER", -200, -200)
 
     DisplayFrame_next = CreateFrame("Button", nil, ShadbroDisplayFrame, "SecureActionButtonTemplate")
-    -- displayFrame_last:SetWidth(40)
     DisplayFrame_next:SetWidth(40)
     DisplayFrame_next:SetHeight(40)
-    -- displayFrame_next.flashing = 1;
     DisplayFrame_next:SetPoint("TOPLEFT", 170, -10)
-    
-    
-    
-    
 
     DisplayFrame_next:SetButtonState("Normal")
     local t = DisplayFrame_next:CreateTexture(nil, "BACKGROUND")
     -- t:SetTexture(nil)
     t:SetAllPoints(DisplayFrame_next)
     t:SetTexture(Shadbro.SpellTextures[Spell_priest_shadowWordPain.SpellId])
-    -- displayFrame_next.texture = t
     DisplayFrame_next:SetNormalTexture(t)
 
 
@@ -344,12 +584,7 @@ function Shadbro:CreateGUI()
     DisplayFrame_next:SetAttribute("type","action");-- Set type to "macro"
     DisplayFrame_next:SetAttribute("action",Spell_priest_shadowWordPain.ActionButton[1]);-- Set our macro text
 
-    -- DisplayFrame_next:SetScript("OnClick", function(self, button, down)
-    --     -- LCG:ButtonGlow_Stop(button)
-    --     -- LCG.ButtonGlow_Start(self)
-    --     LCG.ButtonGlow_Stop(self)
 
-    -- end)
     Shadbro.displayFrame_next = DisplayFrame_next
 
     displayFrame:Show()
@@ -452,40 +687,10 @@ function Shadbro:CreateGUI2()
     -- displayFrame_next:SetNormalTexture(Spell_priest_shadowWordPain.texture)
     Shadbro.textureList["next"] = t
 
-    -- t = displayFrame_currentHighlight:CreateTexture(nil, "BACKGROUND")
-    -- t:SetTexture(.1, .5, .1)
-    -- t:SetAllPoints(displayFrame_currentHighlight)
-    -- t:SetAlpha(0)
-    -- displayFrame_currentHighlight.texture = t
-    -- Shadbro.textureList["highlight"] = t
-
-    -- local MacroButton=CreateFrame("Button","MyMacroButton",nil,"SecureActionButtonTemplate");
     displayFrame_next:RegisterForClicks("AnyUp");--   Respond to all buttons
     displayFrame_next:SetAttribute("type","action");-- Set type to "macro"
     displayFrame_next:SetAttribute("action",Spell_priest_shadowWordPain.ActionButton[1]);-- Set our macro text
 
-
-    -- C_Timer.After(3, function ()
-    --     displayFrame_next:SetEnabled(false)
-    --     -- t = displayFrame_next.texture
-    --     -- t:SetAllPoints(displayFrame_next)
-    --     -- t:SetDesaturated(1)
-    --     -- displayFrame_next.texture = t
-    --     -- self:SetDesaturated(1)
-    -- end)
-    -- displayFrame_next:SetScript("OnClick", function(self, button, down)
-    --     -- self:SetTexture(Spell_priest_shadowWordPain.texture)
-    --     -- t = displayFrame_next.texture
-    --     -- t:SetDesaturated(0)
-    --     -- displayFrame_next.texture = t
-    --     -- self:SetDesaturated(1)
-    --     print("clicked")
-    -- end)
-    -- displayFrame:SetScript("OnUpdate", function(this, elapsed)
-    --     -- sbd:log_debug('event: displayFrame: OnUpdate')
-
-    --     Shadbro:OnUpdate(elapsed)
-    -- end)
 
     local cooldownFrame = CreateFrame("Cooldown", "$parent_cooldown", ShadbroDisplayFrame_current)
     cooldownFrame:SetHeight(70)
@@ -582,226 +787,6 @@ function Shadbro:CreateGUI2()
     Shadbro.textureList["next"]:SetTexture(Shadbro.SpellTextures[Spell_priest_shadowWordPain.SpellId])
 
 end
-
--- function FaceMelter:CreateOptionFrame()
---     sbd:log_debug('function: CreateOptionFrame')
-
---     local panel = CreateFrame("FRAME", "FaceMelterOptions")
---     panel.name = "Face Melter Classic"
---     local fstring1 = panel:CreateFontString("FaceMelterOptions_string1", "OVERLAY", "GameFontNormal")
---     local fstring2 = panel:CreateFontString("FaceMelterOptions_string2", "OVERLAY", "GameFontNormal")
---     local fstring3 = panel:CreateFontString("FaceMelterOptions_string3", "OVERLAY", "GameFontNormal")
---     local fstring4 = panel:CreateFontString("FaceMelterOptions_string4", "OVERLAY", "GameFontNormal")
---     local fstring5 = panel:CreateFontString("FaceMelterOptions_string4", "OVERLAY", "GameFontNormal")
---     fstring1:SetText("Lock")
---     fstring2:SetText("Include Vampiric Embrace ")
---     fstring3:SetText("Include Shadow Word: Death ")
---     fstring4:SetText("Health Percent for SW:D Cutoff")
---     fstring5:SetText("GUI Scale")
---     fstring1:SetPoint("TOPLEFT", 10, -10)
---     fstring2:SetPoint("TOPLEFT", 10, -40)
---     fstring3:SetPoint("TOPLEFT", 10, -70)
---     fstring4:SetPoint("TOPLEFT", 10, -100)
---     fstring5:SetPoint("TOPLEFT", 10, -130)
-
---     local checkbox1 = CreateFrame("CheckButton", "$parent_cb1", panel, "OptionsCheckButtonTemplate")
---     local checkbox2 = CreateFrame("CheckButton", "$parent_cb2", panel, "OptionsCheckButtonTemplate")
---     local checkbox3 = CreateFrame("CheckButton", "$parent_cb3", panel, "OptionsCheckButtonTemplate")
---     checkbox1:SetWidth(18)
---     checkbox1:SetHeight(18)
---     checkbox2:SetWidth(18)
---     checkbox2:SetHeight(18)
---     checkbox3:SetWidth(18)
---     checkbox3:SetHeight(18)
-
---     checkbox1:SetScript("OnClick", function()
---         sbd:log_debug('checkbox1: event: Onclick')
-
---         FaceMelter:ToggleLocked()
---     end)
-
---     checkbox2:SetScript("OnClick", function()
---         sbd:log_debug('checkbox2: event: Onclick')
-
---         FaceMelter:ToggleVE()
---     end)
-
---     checkbox3:SetScript("OnClick", function()
---         sbd:log_debug('checkbox3: event: Onclick')
-
---         FaceMelter:ToggleDeath()
---     end)
-
---     checkbox1:SetPoint("TOPRIGHT", -10, -10)
---     checkbox2:SetPoint("TOPRIGHT", -10, -40)
---     checkbox3:SetPoint("TOPRIGHT", -10, -70)
---     checkbox1:SetChecked(FaceMelter:GetLocked())
---     checkbox2:SetChecked(FaceMelter:GetVE())
---     checkbox3:SetChecked(FaceMelter:GetDeath())
-
---     FaceMelter.VECheck2 = checkbox2
---     FaceMelter.SWDCheck2 = checkbox3
-
---     local slider1 = CreateFrame("Slider", "$parent_sl1", panel, "OptionsSliderTemplate")
---     local slider2 = CreateFrame("Slider", "$parent_sl2", panel, "OptionsSliderTemplate")
---     slider1:SetMinMaxValues(0, 100)
---     slider2:SetMinMaxValues(.5, 1.5)
---     slider1:SetValue(FaceMelter:GetHealthPercent())
---     slider2:SetValue(FaceMelter:GetScale())
---     slider1:SetValueStep(1)
---     slider2:SetValueStep(.05)
-
---     slider1:SetScript("OnValueChanged", function(self)
---         sbd:log_debug('slider1: event: OnValueChanged')
-
---         FaceMelter:SetHealthPercent(self:GetValue())
---         getglobal(self:GetName() .. "Text"):SetText(self:GetValue())
---     end)
-
---     slider2:SetScript("OnValueChanged", function(self)
---         sbd:log_debug('slider2: event: OnValueChanged')
-
---         FaceMelter:SetScale(self:GetValue())
---         getglobal(self:GetName() .. "Text"):SetText(self:GetValue())
---     end)
-
---     getglobal(slider1:GetName() .. "Low"):SetText("1")
---     getglobal(slider1:GetName() .. "High"):SetText("100")
---     getglobal(slider1:GetName() .. "Text"):SetText(FaceMelter:GetHealthPercent())
---     getglobal(slider2:GetName() .. "Low"):SetText("0.5")
---     getglobal(slider2:GetName() .. "High"):SetText("1.5")
---     getglobal(slider2:GetName() .. "Text"):SetText(FaceMelter:GetScale())
---     slider1:SetPoint("TOPRIGHT", -10, -100)
---     slider2:SetPoint("TOPRIGHT", -10, -130)
-
---     local fstring6 = panel:CreateFontString("FaceMelterOptions_string6", "OVERLAY", "GameFontNormal")
---     local fstring7 = panel:CreateFontString("FaceMelterOptions_string7", "OVERLAY", "GameFontNormal")
---     local fstring8 = panel:CreateFontString("FaceMelterOptions_string8", "OVERLAY", "GameFontNormal")
---     local fstring9 = panel:CreateFontString("FaceMelterOptions_string9", "OVERLAY", "GameFontNormal")
---     local fstring10 = panel:CreateFontString("FaceMelterOptions_string10", "OVERLAY", "GameFontNormal")
---     local fstring6a = panel:CreateFontString("FaceMelterOptions_string6a", "OVERLAY", "GameFontNormal")
---     fstring6a:SetText("Priority List: 1 is first, 5 is last.")
---     fstring6:SetText("SW: Pain")
---     fstring7:SetText("Vampiric Touch")
---     fstring8:SetText("Mind Blast")
---     fstring9:SetText("SW: Death")
---     fstring10:SetText("Vampric Embrace")
---     fstring6a:SetPoint("TOPLEFT", 10, -160)
---     fstring6:SetPoint("TOPLEFT", 10, -190)
---     fstring7:SetPoint("TOPLEFT", 10, -220)
---     fstring8:SetPoint("TOPLEFT", 10, -250)
---     fstring9:SetPoint("TOPLEFT", 10, -280)
---     fstring10:SetPoint("TOPLEFT", 10, -310)
-
---     local slider3 = CreateFrame("Slider", "FaceMelterOptions_sl_SWP", panel, "OptionsSliderTemplate")
---     local slider4 = CreateFrame("Slider", "FaceMelterOptions_sl_VT", panel, "OptionsSliderTemplate")
---     local slider5 = CreateFrame("Slider", "FaceMelterOptions_sl_MB", panel, "OptionsSliderTemplate")
---     local slider6 = CreateFrame("Slider", "FaceMelterOptions_sl_SWD", panel, "OptionsSliderTemplate")
---     local slider7 = CreateFrame("Slider", "FaceMelterOptions_sl_VE", panel, "OptionsSliderTemplate")
---     slider3:SetMinMaxValues(1, 5)
---     slider4:SetMinMaxValues(1, 5)
---     slider5:SetMinMaxValues(1, 5)
---     slider6:SetMinMaxValues(1, 5)
---     slider7:SetMinMaxValues(1, 5)
---     slider3:SetValueStep(1)
---     slider4:SetValueStep(1)
---     slider5:SetValueStep(1)
---     slider6:SetValueStep(1)
---     slider7:SetValueStep(1)
---     slider3:SetValue(FaceMelter:GetPri("SWP"))
---     slider4:SetValue(FaceMelter:GetPri("VT"))
---     slider5:SetValue(FaceMelter:GetPri("MB"))
---     slider6:SetValue(FaceMelter:GetPri("SWD"))
---     slider7:SetValue(FaceMelter:GetPri("VE"))
---     getglobal(slider3:GetName() .. "Low"):SetText("1")
---     getglobal(slider3:GetName() .. "High"):SetText("5")
---     getglobal(slider3:GetName() .. "Text"):SetText(FaceMelter:GetPri("SWP"))
---     getglobal(slider4:GetName() .. "Low"):SetText("1")
---     getglobal(slider4:GetName() .. "High"):SetText("5")
---     getglobal(slider4:GetName() .. "Text"):SetText(FaceMelter:GetPri("VT"))
---     getglobal(slider5:GetName() .. "Low"):SetText("1")
---     getglobal(slider5:GetName() .. "High"):SetText("5")
---     getglobal(slider5:GetName() .. "Text"):SetText(FaceMelter:GetPri("MB"))
---     getglobal(slider6:GetName() .. "Low"):SetText("1")
---     getglobal(slider6:GetName() .. "High"):SetText("5")
---     getglobal(slider6:GetName() .. "Text"):SetText(FaceMelter:GetPri("SWD"))
---     getglobal(slider7:GetName() .. "Low"):SetText("1")
---     getglobal(slider7:GetName() .. "High"):SetText("5")
---     getglobal(slider7:GetName() .. "Text"):SetText(FaceMelter:GetPri("VE"))
---     slider3:SetPoint("TOPRIGHT", -10, -190)
---     slider4:SetPoint("TOPRIGHT", -10, -220)
---     slider5:SetPoint("TOPRIGHT", -10, -250)
---     slider6:SetPoint("TOPRIGHT", -10, -280)
---     slider7:SetPoint("TOPRIGHT", -10, -310)
-
---     slider3:SetScript("OnValueChanged", function(self)
---         sbd:log_debug('slider3: event: OnValueChanged')
-
---         FaceMelter:SetPri("SWP", self:GetValue())
---         getglobal(self:GetName() .. "Text"):SetText(self:GetValue())
---     end)
-
---     slider4:SetScript("OnValueChanged", function(self)
---         sbd:log_debug('slider4: event: OnValueChanged')
-
---         FaceMelter:SetPri("VT", self:GetValue())
---         getglobal(self:GetName() .. "Text"):SetText(self:GetValue())
---     end)
-
---     slider5:SetScript("OnValueChanged", function(self)
---         sbd:log_debug('slider5: event: OnValueChanged')
-
---         FaceMelter:SetPri("MB", self:GetValue())
---         getglobal(self:GetName() .. "Text"):SetText(self:GetValue())
---     end)
-
---     slider6:SetScript("OnValueChanged", function(self)
---         sbd:log_debug('slider6: event: OnValueChanged')
-
---         FaceMelter:SetPri("SWD", self:GetValue())
---         getglobal(self:GetName() .. "Text"):SetText(self:GetValue())
---     end)
-
---     slider7:SetScript("OnValueChanged", function(self)
---         sbd:log_debug('slider7: event: OnValueChanged')
-
---         FaceMelter:SetPri("VE", self:GetValue())
---         getglobal(self:GetName() .. "Text"):SetText(self:GetValue())
---     end)
-
---     local fstringMO = panel:CreateFontString("FaceMelterOptions_stringMO", "OVERLAY", "GameFontNormal")
---     fstringMO:SetText("Mini Options Alpha")
---     fstringMO:SetPoint("TOPLEFT", 10, -340)
-
---     local sliderMO = CreateFrame("Slider", "$parent_sMO", panel, "OptionsSliderTemplate")
---     sliderMO:SetMinMaxValues(0, 1)
---     sliderMO:SetValue(facemelterdb.miniOptionsAlpha)
---     sliderMO:SetValueStep(.05)
---     sliderMO:SetScript("OnValueChanged", function(self)
---         sbd:log_debug('sliderMO: event: OnValueChanged')
-
---         FaceMelter:SetMiniAlpha(self:GetValue())
---         getglobal(self:GetName() .. "Text"):SetText(self:GetValue())
---     end)
---     getglobal(sliderMO:GetName() .. "Low"):SetText("0")
---     getglobal(sliderMO:GetName() .. "High"):SetText("1")
---     getglobal(sliderMO:GetName() .. "Text"):SetText(facemelterdb.miniOptionsAlpha)
---     sliderMO:SetPoint("TOPRIGHT", -10, -340)
-
---     InterfaceOptions_AddCategory(panel)
--- end
-
--- -- function Shadbro.IsDotOnTarget(id)
--- --     for i=1,40 do 
--- --         local name, _, count, _, expirationTime, duration, source, _, _, spellId, canApplyAura, _, _, _, _ = UnitDebuff("target",i)
--- --         -- and spellId == ShadowWordPainId
--- --         if source == "player"  and spellId == id then 
--- --             -- sbd:log_debug("Checking target: ", name, ":",source, ":",spellId, ":",canApplyAura, " duration: ", duration, "expiration: ", expirationTime)
--- --             return true
--- --         end
--- --     end
--- --     return false
--- -- end
 
 function Shadbro.GetDotExpiration(id)
     for i=1,40 do 
