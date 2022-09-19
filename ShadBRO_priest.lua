@@ -7,7 +7,8 @@ Spell_priest_shadowWordPain = {
     Enabled     = true,
     IsKnown     = false,
     IsDot       = true,
-    Priority    = 1
+    IsCastable  = true,
+    Priority    = 5
 }
 
 Spell_priest_vampiricTouch = {
@@ -15,8 +16,9 @@ Spell_priest_vampiricTouch = {
     Enabled     = true,
     IsKnown     = false,
     IsDot       = true,
+    IsCastable  = true,
     texture     = {},
-    Priority    = 2
+    Priority    = 1
 }
 
 Spell_priest_devouringPlague = {
@@ -24,8 +26,9 @@ Spell_priest_devouringPlague = {
     Enabled  = true,
     IsKnown = false,
     IsDot   = true,
+    IsCastable  = true,
     texture  = {},
-    Priority = 3
+    Priority = 2
 }
 
 Spell_priest_vampiricEmpbrace = {
@@ -33,7 +36,8 @@ Spell_priest_vampiricEmpbrace = {
     Enabled  = true,
     IsKnown = false,
     IsDot   = true,
-    texture  = {},
+    IsCastable  = true,
+    texture     = {},
     Priority = 6
 }
 
@@ -42,8 +46,9 @@ Spell_priest_mindBlast = {
     Enabled  = true,
     IsKnown = false,
     IsDot   = true,
+    IsCastable  = true,
     texture  = {},
-    Priority = 4
+    Priority = 3
 }
 
 Spell_priest_shadowWordDeath = {
@@ -51,8 +56,9 @@ Spell_priest_shadowWordDeath = {
     Enabled  = true,
     IsKnown = false,
     IsDot   = true,
+    IsCastable  = true,
     texture  = {},
-    Priority = 5
+    Priority = 7
 }
 
 Spell_priest_mindFlay = {
@@ -60,6 +66,7 @@ Spell_priest_mindFlay = {
     Enabled  = true,
     IsKnown = false,
     IsDot   = true,
+    IsCastable  = true,
     texture  = {},
     Priority = 4
 }
@@ -71,15 +78,13 @@ Spell_priest_shadowWeaving = {
     IsKnown  = false,
     IsDot    = false,
     IsAura   = true,
+    IsCastable  = false,
     texture  = {},
     Priority = 10
 }
 
--- All lists indexed by spell key.
-Shadbro.SpellList       = {}
-Shadbro.SpellCastTime   = {}
-Shadbro.SpellTextures   = {}
-Shadbro.Priority        = {}
+
+
 
 function LoadPriestSpells()
     LoadSpell(Spell_priest_shadowWordPain)
@@ -87,6 +92,9 @@ function LoadPriestSpells()
     LoadSpell(Spell_priest_devouringPlague)
     LoadSpell(Spell_priest_vampiricEmpbrace)
     LoadSpell(Spell_priest_shadowWeaving)
+    LoadSpell(Spell_priest_mindFlay)
+    LoadSpell(Spell_priest_shadowWordDeath)
+    LoadSpell(Spell_priest_mindBlast)
 end
 
 function LoadSpell(Spell)
@@ -96,10 +104,10 @@ function LoadSpell(Spell)
     Shadbro.SpellTextures[Spell.SpellId]   = GetSpellTexture(Spell.SpellId)
     Shadbro.SpellList[Spell.SpellId]       = Spell
     Shadbro.Priority[Spell.Priority]       = Spell.SpellId
-    Spell.ActionButton = C_ActionBar.FindSpellActionButtons(Spell.SpellId)
-    if Spell.ActionButton then
-        sbd:log_debug('Value:', Shadbro.SpellList[Spell.SpellId].Name, "Action Button: ", Spell.ActionButton[1])
-    end
+    -- Spell.ActionButton = C_ActionBar.FindSpellActionButtons(Spell.SpellId)
+    -- if Spell.ActionButton then
+    --     sbd:log_debug('Value:', Shadbro.SpellList[Spell.SpellId].Name, "Action Button: ", Spell.ActionButton[1])
+    -- end
 end
 
 function DecideTicks()
