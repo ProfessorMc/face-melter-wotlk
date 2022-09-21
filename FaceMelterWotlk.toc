@@ -7,6 +7,10 @@
 
 embeds.xml
 
-sbd.lua
-ShadBRO_WOTLK.lua
-ShadBRO_priest.lua
+FaceMelter_core_logger.lua
+FaceMelter_core_player.lua
+FaceMelter_core_target.lua
+FaceMelter_core.lua
+FaceMelter_core_events.lua
+FaceMelter_priest.lua
+FaceMelter_death_knight.lua
