@@ -1,0 +1,16 @@
+## Interface: 30400
+## Title: FaceMelterWotlk
+## Notes: Shadow priest max dps inspired by FaceMelterClassic
+## Author: ProfessorMc
+## Version: 0.0.1-beta
+## SavedVariables: facemelter_wolk
+
+embeds.xml
+
+FaceMelter_core_logger.lua
+FaceMelter_core_player.lua
+FaceMelter_core_target.lua
+FaceMelter_core.lua
+FaceMelter_core_events.lua
+FaceMelter_priest.lua
+FaceMelter_death_knight.lua
