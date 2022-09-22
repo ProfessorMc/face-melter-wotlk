@@ -1,28 +1,35 @@
-local logger = {}
-logger.log_level_debug = false
+local logger_prototype = {}
+logger_prototype.log_level_debug = false
+
+local metatable = {
+    __index = logger_prototype
+}
 
 function GetLogger()
-    return logger
+    return setmetatable({}, metatable)
 end
 
-function logger:SetDebug()
-    self.log_level_debug = true
+function logger_prototype:SetDebug(debug_level)
+    self.log_level_debug = debug_level
 end
 
-function logger:log_info(...)
+function logger_prototype:log_info(...)
     self:_log("|cff00ffff", ...)
 end
 
-function logger:log_debug(...)
-    if logger.log_level_debug == true then
+function logger_prototype:log_debug(...)
+    if not self.log_level_debug then
+        self.log_level_debug = false
+    end
+    if self.log_level_debug == true then
         self:_log("|cff888888", ...)
     end
 end
 
-function logger:log_error(...)
+function logger_prototype:log_error(...)
     self:_log("|cffff8888", 'err:', ...)
 end
 
-function logger:_log(color, ...)
+function logger_prototype:_log(color, ...)
     print(color, '[FACEMELTER] ', ...)
 end

@@ -1,8 +1,10 @@
 local MAX_PLAYER_AURAS = 40
 local NUM_GLYPH_SLOTS  = 6
 local player_prototype = {}
-
 local GetGlyph = GetGlyphSocketInfo
+local logger = GetLogger()
+logger:SetDebug(false)
+
 
 local metatable = {
     __index = player_prototype
@@ -24,6 +26,23 @@ function player_prototype:GetClass()
         _, self.class = UnitClass("player")
     end
     return self.class
+end
+
+function player_prototype:CurrentSpell()
+    if not self.current_spell or self.current_spell == "none" then
+        return
+    end
+    return self.current_spell
+end
+
+function player_prototype:StartCasting(spell_id)
+    logger:log_debug('started casting: ', spell_id)
+    self.current_spell = spell_id
+end
+
+function player_prototype:StopCasting(spell_id)
+    logger:log_debug('stopped casting: ', spell_id)
+    self.current_spell = "none"
 end
 
 function player_prototype:IsSpecChange()
@@ -111,7 +130,7 @@ function player_prototype:GetAura(aura_id)
     end
 
     if GetTime() < self.aura_list[aura_id].expirationTime then
-        print('aura found id: ', aura_id)
+        logger:log_debug('aura found id: ', aura_id)
         return self.aura_list[aura_id]
     end
     -- print('aura expired id: ', aura_id, 'time: ', GetTime(), 'exp: ',  self.aura_list[aura_id].expirationTime)
@@ -146,9 +165,8 @@ function player_prototype:UpdatePlayerGlyphs()
     for i=1,NUM_GLYPH_SLOTS  do
         local enabled, glyphType, glyphTooltipIndex, glyphSpellID, icon = GetGlyph(i)
         if enabled then
-            print("glyph_id: ", glyphSpellID, "idx: ", glyphTooltipIndex)
-            print(GetGlyphLink(i))
-            -- print(GetTalentInfo(i, i))
+            logger:log_debug("glyph_id: ", glyphSpellID, "idx: ", glyphTooltipIndex)
+            logger:log_debug(GetGlyphLink(i))
             self.known_glyphs[glyphSpellID] = glyphTooltipIndex
         end
     end

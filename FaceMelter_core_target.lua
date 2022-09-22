@@ -19,16 +19,46 @@ function target_prototype:OnTargetChange()
         self:SetFriendlyTarget()
         return
     end
-
+    self.target_type = "hostile"
     self:UpdateAuras()
 end
 
 function target_prototype:SetNoTarget()
     self.aura_list = {}
+    self.target_type = "none"
 end
 
 function target_prototype:SetFriendlyTarget()
     self.aura_list = {}
+    self.is_friendly = "friendly"
+end
+
+function target_prototype:IsSelf()
+    if not self.target_type then
+        target_prototype:OnTargetChange()
+    end
+    return self.target_type == "player"
+end
+
+function target_prototype:IsNoTarget()
+    if not self.target_type then
+        target_prototype:OnTargetChange()
+    end
+    return self.target_type == "none"
+end
+
+function target_prototype:IsHostile()
+    if not self.target_type then
+        target_prototype:OnTargetChange()
+    end
+    return self.target_type == "hostile"
+end
+
+function target_prototype:IsFriendly()
+    if not self.target_type then
+        target_prototype:OnTargetChange()
+    end
+    return self.target_type == "friendly" or target_prototype:IsSelf()
 end
 
 function target_prototype:IsAuraPresent(spell_id)
@@ -37,10 +67,10 @@ function target_prototype:IsAuraPresent(spell_id)
     end
     self:UpdateAuras()
     if not self.aura_list[spell_id] then
-        print("NotFound", spell_id)
+        -- print("NotFound", spell_id)
         return false
     end
-    print("Found", spell_id)
+    -- print("Found", spell_id)
     return self.aura_list[spell_id]
 end
 
