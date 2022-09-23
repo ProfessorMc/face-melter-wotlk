@@ -11,12 +11,24 @@ function fm_core_event_frame.ADDON_LOADED(addon)
     FM_CORE:OnLoad(addon)
 end
 
+fm_core_event_frame:RegisterEvent("SPELLS_CHANGED")
+function fm_core_event_frame.SPELLS_CHANGED()
+    FM_CORE:OnSpellsChange()
+end
+
 function fm_core_event_frame.PLAYER_REGEN_DISABLED()
     FM_CORE:SetInCombat(true)
 end
 
-function fm_core_event_frame.UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spellID)
+function fm_core_event_frame.UNIT_SPELLCAST_SUCCEEDED(unitTarget, castGUID, spell_id)
     logger:log_debug('event: UNIT_SPELLCAST_SUCCEEDED')
+    FM_CORE:HandleCastComplete(spell_id)
+end
+
+
+function fm_core_event_frame.SPELL_UPDATE_COOLDOWN(unitTarget, castGUID, spellID)
+    logger:log_debug('event: SPELL_UPDATE_COOLDOWN')
+    FM_CORE:HandleUpdateCoolldown()
 end
 
 function fm_core_event_frame.UNIT_SPELLCAST_FAILED(unitTarget, castGUID, spell_id)
@@ -115,6 +127,7 @@ function RegisterEvents()
     fm_core_event_frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     fm_core_event_frame:RegisterEvent("PLAYER_TALENT_UPDATE")
     fm_core_event_frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+    fm_core_event_frame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     fm_core_event_frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     fm_core_event_frame:RegisterEvent("UNIT_SPELLCAST_FAILED")
     fm_core_event_frame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")

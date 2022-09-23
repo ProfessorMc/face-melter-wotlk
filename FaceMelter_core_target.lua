@@ -74,6 +74,28 @@ function target_prototype:IsAuraPresent(spell_id)
     return self.aura_list[spell_id]
 end
 
+function target_prototype:GetDebuffDuration(spell_id)
+    if not self.aura_list then
+        self:UpdateAuras()
+    end
+    self:UpdateAuras()
+    if not self.aura_list[spell_id] then
+        -- print("NotFound", spell_id)
+        return 0, 0
+    end
+    
+    local start_time = self.aura_list[spell_id].expirationTime - self.aura_list[spell_id].duration
+    if self.aura_list[spell_id].expirationTime < GetTime() then
+        -- print("Expired", spell_id)
+        return 0, 0
+    end
+
+    -- print("Set", spell_id)
+    return start_time, self.aura_list[spell_id].duration
+end
+
+
+
 function target_prototype:OnAuraChange()
     self:UpdateAuras()
 end
