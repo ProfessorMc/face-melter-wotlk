@@ -10,31 +10,58 @@ function FM_CORE:OnLoad(addon)
     if addon ~= "FaceMelterWotlk" then
         return
     end
+end
+
+function FM_CORE:OnSpellsChange()
     local playerClass = player_information:GetClass()
-    if FM_CORE:IsClassSupported(playerClass) ~= true then
+    if self:IsClassSupported(playerClass) ~= true then
         UnregisterEvents()
         logger:log_info('playerClass: ', playerClass,' not supported')
     else
         RegisterEvents()
         player_information:UpdateCharacter()
         logger:log_info('loaded playerClass: ', playerClass,' player name: ', self:GetPlayerName())
-        FM_CORE:CreateUI()
+        self:CreateUI()
     end
 end
 
 function FM_CORE:CreateUI()
+    FM_CORE:ResetPlayerCastBar()
+end
+
+function FM_CORE:ResetPlayerCastBar()
+    if not self.cast_bar then
+        self:CreatePlayerCastBar()
+        return
+    end
+
+    -- hide the buttons, they will be show again if they are added back
+    for _, value in pairs(self.ActionButtons) do
+        value:Hide()
+    end
+
     self:CreatePlayerCastBar()
+    self:PushButtonState()
 end
 
 function FM_CORE:CreatePlayerCastBar()
     local margin, button_size = 2, 40
-    local spell_count = fm_libs[player_information:GetClass()]:SpellCount(player_information)
+    local spell_lib = fm_libs[player_information:GetClass()]
+    local know_spells, spell_count = player_information:GetKnownSpells(spell_lib)
+    logger:log_debug("drawing spell count: ", spell_count)
     if not spell_count or spell_count < 1 then
+        if self.cast_bar then
+            self.cast_bar:Hide()
+        end
         return
+    end
+    local displayFrame = self.cast_bar
+    if not displayFrame then
+        logger:log_debug("creating new display frame")
+        displayFrame = CreateFrame("Frame", "ShadbroDisplayFrame", UIParent, "BackdropTemplate")
     end
 
     logger:log_debug("drawing spell count: ", spell_count)
-    local displayFrame = CreateFrame("Frame", "ShadbroDisplayFrame", UIParent, "BackdropTemplate")
     displayFrame:SetFrameStrata("BACKGROUND")
     displayFrame:SetWidth(40 * spell_count + 2 * spell_count)
     displayFrame:SetHeight(50)
@@ -57,45 +84,58 @@ function FM_CORE:CreatePlayerCastBar()
         self:StopMovingOrSizing()
     end)
     displayFrame:SetPoint("CENTER", -200, -200)
-    FM_CORE.cast_bar = displayFrame
+    self.cast_bar = displayFrame
 
-    for key, value in pairs(fm_libs[player_information:GetClass()]:GetSpells()) do
+    for key, value in pairs(know_spells) do
         self:AddChild(displayFrame, button_size, key - 1 , margin, value)
     end
+    self.cast_bar:Show()
 end
 
 function FM_CORE:AddChild(parentDisplayFrame, size, offset, margin, spell)
-    if not FM_CORE.textures then
-        FM_CORE.textures = {}
+    if not self.textures then
+        self.textures = {}
     end
-    local spellButton = CreateFrame("Button", nil, parentDisplayFrame, "SecureActionButtonTemplate")
+
+    if not self.ActionButtons then
+        self.ActionButtons = {}
+    end
+
+    if not self.cooldowns then
+        self.cooldowns = {}
+    end
+
+    local spell_id = spell.spell_id
+    local spellButton = self.ActionButtons[spell_id]
+    if not spellButton then
+        spellButton = CreateFrame("Button", nil, parentDisplayFrame, "SecureActionButtonTemplate")
+
+        self.textures[spell_id] = spellButton:CreateTexture(nil, "BACKGROUND")
+        self.textures[spell_id]:SetAllPoints(spellButton)
+        self.textures[spell_id]:SetTexture(spell.texture)
+        self.textures[spell_id]:SetDesaturation(.9)
+        spellButton:SetNormalTexture(self.textures[spell_id])
+
+        spellButton["_PixelGlow"] = spell.spell_id
+        spellButton:SetAttribute("type","spell");-- Set type to "macro"
+        spellButton:SetAttribute("spell", spell.name);-- Set our macro text
+
+
+
+        self.cooldowns[spell_id] = CreateFrame("Cooldown", spell_id, spellButton, "CooldownFrameTemplate")
+        self.cooldowns[spell_id] = CreateFrame("Cooldown", "myCooldown", spellButton, "CooldownFrameTemplate")
+        self.cooldowns[spell_id]:SetAllPoints()
+        self.cooldowns[spell_id]:SetCooldown(0, 0)
+
+    end
+    spellButton:SetParent(parentDisplayFrame)
     spellButton:SetWidth(size)
     spellButton:SetHeight(size)
     spellButton:SetPoint("TOPLEFT", offset * size + margin + offset * margin, -margin )
 
-    local spell_id = spell.spell_id
-    FM_CORE.textures[spell_id] = spellButton:CreateTexture(nil, "BACKGROUND")
-    FM_CORE.textures[spell_id]:SetAllPoints(spellButton)
-    FM_CORE.textures[spell_id]:SetTexture(spell.texture)
-    FM_CORE.textures[spell_id]:SetDesaturation(.9)
-    spellButton:SetNormalTexture(FM_CORE.textures[spell_id])
-
-    spellButton["_PixelGlow"] = spell.spell_id
-    spellButton:SetAttribute("type","spell");-- Set type to "macro"
-    spellButton:SetAttribute("spell", spell.name);-- Set our macro text
-
-    if not FM_CORE.cooldowns then
-        FM_CORE.cooldowns = {}
-    end
-    FM_CORE.cooldowns[spell_id] = CreateFrame("Cooldown", spell_id, spellButton, "CooldownFrameTemplate")
-    FM_CORE.cooldowns[spell_id] = CreateFrame("Cooldown", "myCooldown", spellButton, "CooldownFrameTemplate")
-    FM_CORE.cooldowns[spell_id]:SetAllPoints()
-    FM_CORE.cooldowns[spell_id]:SetCooldown(0, 0)
-
-    if not FM_CORE.ActionButtons then
-        FM_CORE.ActionButtons = {}
-    end
-    FM_CORE.ActionButtons[spell_id] = spellButton
+    -- spellButton:Show()
+    self.ActionButtons[spell_id] = spellButton
+    self.ActionButtons[spell_id]:Show()
 end
 
 function FM_CORE:SetGlow(spell_id)
@@ -122,22 +162,31 @@ end
 
 function FM_CORE:PushButtonState()
     for _, spell in pairs(fm_libs[player_information:GetClass()]:GetSpells()) do
-        if spell.is_next then
-            FM_CORE.textures[spell.spell_id]:SetAllPoints()
-            FM_CORE.textures[spell.spell_id]:SetDesaturation(.9)
-            self:SetGlow(spell.spell_id)
+        if not self.ActionButtons[spell.spell_id] then
+
         else
-            FM_CORE.textures[spell.spell_id]:SetAllPoints()
-            FM_CORE.textures[spell.spell_id]:SetDesaturation(0)
-            self:UnsetGlow(spell.spell_id)
+            if spell.is_next then
+                self.textures[spell.spell_id]:SetAllPoints()
+                self.textures[spell.spell_id]:SetDesaturation(0)
+                self:SetGlow(spell.spell_id)
+            else
+                self.textures[spell.spell_id]:SetAllPoints()
+                self.textures[spell.spell_id]:SetDesaturation(.9)
+                self:UnsetGlow(spell.spell_id)
+            end
+
+            local start, duration = fm_libs[player_information:GetClass()]:GetSpellCooldown(spell.spell_id, self.target_info)
+            logger:log_debug("start: ", start, "duration: ", duration, "spell: ", spell.spell_id)
+            self.cooldowns[spell.spell_id]:SetCooldown(start, duration)
         end
+
     end
 end
 
 function FM_CORE:ClearAllButtons()
     for _, spell in pairs(fm_libs[player_information:GetClass()]:GetSpells()) do
-        FM_CORE.textures[spell.spell_id]:SetAllPoints()
-        FM_CORE.textures[spell.spell_id]:SetDesaturation(.9)
+        self.textures[spell.spell_id]:SetAllPoints()
+        self.textures[spell.spell_id]:SetDesaturation(.9)
         self:UnsetGlow(spell.spell_id)
     end
 end
@@ -168,24 +217,33 @@ end
 function FM_CORE:UpdatePlayerInformation()
     logger:log_info('FM_CORE:UpdatePlayerInformation')
     player_information:CharacterUpdate()
-    FM_CORE:HandleTargetChange()
+    self:HandleTargetChange()
 end
 
 function FM_CORE:HandlePlayerAuraUpdate()
     logger:log_debug('FM_CORE:HandlePlayerAuraUpdate')
     player_information:OnAuraChange()
-    FM_CORE:HandleTargetChange()
+    self:HandleTargetChange()
 end
 
 function FM_CORE:HandlePlayerTalentUpdate()
     logger:log_debug('FM_CORE: updating player information for talent change')
     player_information:OnSpecChange()
-    FM_CORE:HandleTargetChange()
+    -- FM_CORE:HandleTargetChange()
+    self:ResetPlayerCastBar()
     logger:log_info('spec changed. loaded playerClass: ', player_information:GetClass(),' player name: ', self:GetPlayerName())
 end
 
 function FM_CORE:SetInCombat(in_combat)
     player_information:SetInCombat(in_combat)
+end
+
+function FM_CORE:SetUpdateCooldown()
+    if not self.target_info then
+        self.target_info = CreateTarget()
+    end
+    fm_libs[player_information:GetClass()]:ChooseNext(player_information, self.target_info)
+    self:PushButtonState()
 end
 
 function FM_CORE:HandleTargetChange()
@@ -197,11 +255,11 @@ function FM_CORE:HandleTargetChange()
     fm_libs[player_information:GetClass()]:ChooseNext(player_information, self.target_info)
 
     if self.target_info:IsFriendly() or self.target_info:IsNoTarget() then
-        FM_CORE:ClearAllButtons()
+        self:ClearAllButtons()
         return
     end
 
-    FM_CORE:PushButtonState()
+    self:PushButtonState()
 end
 
 
@@ -215,11 +273,24 @@ function FM_CORE:HandleStartCasting(spell_id)
 end
 
 function FM_CORE:HandleCastComplete(spell_id)
-    -- if not self.target_info then
-    --     self.target_info = CreateTarget()
-    -- end
-    -- fm_libs[player_information:GetClass()]:ChooseNext(player_information, self.target_info, spell_id)
+    if not self.target_info then
+        self.target_info = CreateTarget()
+    end
+    logger:log_debug("update_cooldown: spell_id: ", spell_id)
+    -- player_information:StopCasting(spell_id)
+    fm_libs[player_information:GetClass()]:ChooseNext(player_information, self.target_info, spell_id)
+    self:PushButtonState()
+    -- logger:log_debug("stop_casting")
+end
+
+function FM_CORE:HandleUpdateCoolldown()
+    if not self.target_info then
+        self.target_info = CreateTarget()
+    end
+    logger:log_debug("cast_complete: spell_id: ", spell_id)
     player_information:StopCasting(spell_id)
+    fm_libs[player_information:GetClass()]:ChooseNext(player_information, self.target_info, spell_id)
+    self:PushButtonState()
     -- logger:log_debug("stop_casting")
 end
 
@@ -231,15 +302,15 @@ function FM_CORE:PushNext(spell_id)
 end
 
 function FM_CORE:HandleTargetAuraUpdate()
-    FM_CORE:HandleTargetChange()
+    self:HandleTargetChange()
 end
 
 function FM_CORE:SetSelfTarget()
-    FM_CORE:ClearAllButtons()
+    self:ClearAllButtons()
 end
 
 function FM_CORE:SetFriendlyTarget()
-    FM_CORE:ClearAllButtons()
+    self:ClearAllButtons()
 end
 
 function FM_CORE:SetHostileTarget()

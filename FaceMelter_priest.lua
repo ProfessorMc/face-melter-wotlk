@@ -12,6 +12,8 @@ local function elligibleToCast(player_information, spell_id, current_spell_id)
         return
     end
 
+    priest_lib:UpdateSetSpellCooldown(spell_id)
+    -- local priest_lib:GetSpellCooldown()
     local start, gcd_duration, enabled, gcd_modRate = GetSpellCooldown(61304)
     -- print("Spell GCD cooldown: " .. gcd_duration .. " seconds. mod: ", gcd_modRate, " enabled: ", enabled)
     local start, duration, enabled, modRate = GetSpellCooldown(spell_id)
@@ -19,9 +21,12 @@ local function elligibleToCast(player_information, spell_id, current_spell_id)
         return true
     elseif ( start > 0 and duration > 0) then
         local cdLeft = start + duration - GetTime()
+        logger:log_debug("spell_id", spell_id, "cdLeft", cdLeft, cdLeft < gcd_duration)
+        -- local myTimer = C_Timer.NewTimer(cdLeft, function() print("CD_RESET", FM_CORE:SetUpdateCooldown()) end)
 
         return cdLeft < gcd_duration
     else
+        logger:log_debug("spell_id", spell_id, " start ",  start, " duration ",duration, " enabled ",enabled, " modRate ", modRate)
         return true
     end
 end
@@ -32,6 +37,10 @@ local function debuff_present(target_information, spell_id)
         return true
     end
     return false
+end
+
+local function get_debuff_cd(target_information, spell_id)
+    return target_information:GetDebuffDuration(spell_id)
 end
 
 local aura_shadow_weaving = {
@@ -55,8 +64,6 @@ local glyph_mind_flay = {
 local glyph_shadowWordPain = {
     spell_id = 237643,
 }
-
-
 
 local spell_vampiricEmpbrace = {
     spell_id     = 15286,
@@ -130,8 +137,11 @@ local spell_mindFlay = {
 }
 function spell_mindFlay:ChooseNext(player_information, target_information, current_spell_id)
     if not elligibleToCast(player_information, self.spell_id, current_spell_id) then
+        -- logger:log_debug("spell_mindFlay Inelligible to cast")
         return false
     end
+
+    -- logger:log_debug("spell_mindFlay self.spell_id to cast")
     return debuff_present(target_information, self.spell_id) == false
 end
 
@@ -154,7 +164,7 @@ function spell_shadowWordPain:ChooseNext(player_information, target_information,
             -- we don't have pain and suffering
             -- todo: check if it's expiring soon, if it is, we should re-apply
             logger:log_debug("SWP no ps to cast")
-            return true
+            return false
         end
         logger:log_debug("SWP w// ps to cast")
         return false
@@ -186,7 +196,81 @@ local function getPriority()
 end
 local priority = getPriority()
 
-function priest_lib:GetSpells() 
+function priest_lib:GetSpells()
+    return self.spells
+end
+
+function priest_lib:UpdateSetSpellCooldown(spell_id)
+    if not self.spells_cd then
+        self.spells_cd = {}
+    end
+
+    if not self.spells_cd then
+        self.spells_cd = {}
+    end
+
+    local _, gcd_duration, _, _ = GetSpellCooldown(61304)
+
+    local current_cd = self.spells_cd[spell_id]
+    if not current_cd then
+        local new_cd = {}
+        new_cd.start, new_cd.duration, new_cd.enabled, new_cd.modRate = GetSpellCooldown(spell_id)
+        current_cd = new_cd
+    end
+
+    if (current_cd.start > 0 and current_cd.duration > 0) then
+        -- self.spells_cd[spell_id] = current_cd
+         -- see if there is enough time for us to care about it
+        local cdLeft = current_cd.start + current_cd.duration - GetTime()
+        if cdLeft > gcd_duration then
+            C_Timer.After(cdLeft, function()
+                self.spells_cd[spell_id].pending_timer = false
+                FM_CORE:SetUpdateCooldown()
+            end)
+            self.spells_cd[spell_id] = current_cd
+        elseif cdLeft > 0 then
+            self.spells_cd[spell_id] = current_cd
+        else
+            self.spells_cd[spell_id] = nil
+            return
+        end
+
+    else
+        -- it's expired, reset it
+        self.spells_cd[spell_id] = nil
+        return
+    end
+
+    self.spells_cd[spell_id] = current_cd
+end
+
+function priest_lib:GetSpellCooldown(spell_id, target_information)
+    logger:log_debug("priest_lib:GetSpellCooldown")
+    priest_lib:UpdateSetSpellCooldown(spell_id)
+    local player_cd = self.spells_cd[spell_id]
+    local player_start, player_duration = 0, 0
+    if not player_cd then
+    else
+        player_start, player_duration = player_cd.start, player_cd.duration
+    end
+    logger:log_debug("defer to player_cd: ", player_start, "end: ", player_duration)
+    if not target_information then
+    else
+        local start, duration = get_debuff_cd(target_information, spell_id)
+        if start > 0 and duration > 0 then
+            if start + duration > player_start + player_duration then
+                logger:log_debug("end_chose debuff priest_lib:GetSpellCooldown")
+                return start, duration
+            end
+        else
+            logger:log_debug("defer to player_cd: ", player_start, "end: ", player_duration)
+        end
+    end
+    logger:log_debug("end_chose  player_cd: ", player_start, "end: ", player_duration)
+    return player_start, player_duration
+end
+
+function priest_lib:GetSpellById(spell_id)
     return self.spells
 end
 
@@ -210,39 +294,42 @@ function priest_lib:ChooseNext(player_information, target_information, current_s
     for key, value in pairs(self.spells) do
         if next_chosen then
             value.is_next = false
+            logger:log_debug("Skipped: ", value.name)
         elseif value:ChooseNext(player_information, target_information, current_spell_id) then
             value.is_next = true
             next_chosen = true
+            logger:log_debug("Chose: ", value.name)
         else
             value.is_next = false
+            logger:log_debug("NoChose: ", value.name)
         end
     end
 end
 
-function priest_lib:get_cooldown(spell, player_information, target_information)
-    if not spell:get_cooldown() then
-        return 0, 0
-    end
-    return spell:get_cooldown()
-end
+-- function priest_lib:get_cooldown(spell, player_information, target_information)
+--     if not spell:get_cooldown() then
+--         return 0, 0
+--     end
+--     return spell:get_cooldown()
+-- end
 
-function priest_lib:UpdateSpells(player_information, target_information)
-    if not player_information then
-        return
-    end
-    local next_chosen = false
-    for key, value in pairs(self.spells) do
-        if next_chosen then
-            value.is_next = false
-        elseif value:ChooseNext(player_information, target_information, current_spell_id) then
-            value.is_next = true
-            next_chosen = true
-        else
-            value.is_next = false
-        end
-    end
+-- function priest_lib:UpdateSpells(player_information, target_information)
+--     if not player_information then
+--         return
+--     end
+--     local next_chosen = false
+--     for key, value in pairs(self.spells) do
+--         if next_chosen then
+--             value.is_next = false
+--         elseif value:ChooseNext(player_information, target_information) then
+--             value.is_next = true
+--             next_chosen = true
+--         else
+--             value.is_next = false
+--         end
+--     end
 
-end
+-- end
 
 function priest_lib:SpellCount(player_information)
     if not player_information then
@@ -251,9 +338,12 @@ function priest_lib:SpellCount(player_information)
     local count = 0
     for key, value in pairs(self.spells) do
         if value.enabled == false then
+            -- print("spell is disabled")
         else
             local is_known = player_information:IsBaseSpellKnown(value.spell_id)
+            -- print("spell is checked")
             if is_known then
+                -- print("spell is known")
                 count = count + 1
             end
         end
@@ -266,7 +356,7 @@ function RegisterPriest()
     priest_lib._name = "PRIEST"
     priest_lib:LoadSpell(spell_shadowWordPain)
     priest_lib:LoadSpell(spell_vampiricTouch)
-    priest_lib:LoadSpell(spell_devouringPlague)
+    priest_lib:LoadSpell(spell_devouringPlague)  
     priest_lib:LoadSpell(spell_mindBlast)
     -- priest_lib:LoadSpell(spell_shadowWordDeath)
     -- priest_lib:LoadSpell(spell_vampiricEmpbrace)

@@ -87,7 +87,7 @@ end
 
 function player_prototype:GetTalentInfo(tab, idx)
     if not self.current_talents then
-        player_prototype:UpdateTalents()
+        self:UpdateTalents()
     end
     return self.current_talents[tab][idx]
 end
@@ -133,7 +133,7 @@ function player_prototype:GetAura(aura_id)
         logger:log_debug('aura found id: ', aura_id)
         return self.aura_list[aura_id]
     end
-    -- print('aura expired id: ', aura_id, 'time: ', GetTime(), 'exp: ',  self.aura_list[aura_id].expirationTime)
+    
 end
 
 function player_prototype:SetInCombat(in_combat)
@@ -177,10 +177,21 @@ function player_prototype:IsBaseSpellKnown(spell_id)
         self.known_spells = {}
     end
     if not self.known_spells[spell_id] then
-        local base_spell_id = FindBaseSpellByID(spell_id)
+    local base_spell_id = FindBaseSpellByID(spell_id)
         self.known_spells[spell_id] = IsSpellKnown(base_spell_id)
     end
     return self.known_spells[spell_id]
+end
+
+function player_prototype:GetKnownSpells(spell_lib)
+    local known_spells, count = {}, 0
+    for _, spell in pairs(spell_lib:GetSpells()) do
+        if self:IsBaseSpellKnown(spell.spell_id) then
+            count = count + 1
+            known_spells[count] = spell
+        end
+    end
+    return known_spells, count
 end
 
 function player_prototype:GetSpellCooldown(spell_id)
