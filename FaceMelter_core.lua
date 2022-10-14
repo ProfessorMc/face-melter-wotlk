@@ -161,6 +161,9 @@ function FM_CORE:UnsetGlow(spell_id)
 end
 
 function FM_CORE:PushButtonState()
+    if not self.ActionButtons then
+        return
+    end
     for _, spell in pairs(fm_libs[player_information:GetClass()]:GetSpells()) do
         if not self.ActionButtons[spell.spell_id] then
 
@@ -184,10 +187,15 @@ function FM_CORE:PushButtonState()
 end
 
 function FM_CORE:ClearAllButtons()
+    if not self.textures then
+        return
+    end
     for _, spell in pairs(fm_libs[player_information:GetClass()]:GetSpells()) do
-        self.textures[spell.spell_id]:SetAllPoints()
-        self.textures[spell.spell_id]:SetDesaturation(.9)
-        self:UnsetGlow(spell.spell_id)
+        if spell ~= nil and spell.spell_id ~= nil and self.textures[spell.spell_id] ~= nil then
+            self.textures[spell.spell_id]:SetAllPoints()
+            self.textures[spell.spell_id]:SetDesaturation(.9)
+            self:UnsetGlow(spell.spell_id)
+        end
     end
 end
 
