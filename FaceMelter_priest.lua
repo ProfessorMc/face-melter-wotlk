@@ -228,7 +228,9 @@ function priest_lib:UpdateSetSpellCooldown(spell_id)
         local cdLeft = current_cd.start + current_cd.duration - GetTime()
         if cdLeft > gcd_duration then
             C_Timer.After(cdLeft, function()
-                self.spells_cd[spell_id].pending_timer = false
+                if self.spells_cd[spell_id] ~= nil then
+                    self.spells_cd[spell_id].pending_timer = false
+                end
                 FM_CORE:SetUpdateCooldown()
             end)
             self.spells_cd[spell_id] = current_cd
