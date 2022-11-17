@@ -165,7 +165,8 @@ function player_prototype:UpdatePlayerGlyphs()
 
     for i=1,NUM_GLYPH_SLOTS  do
         local enabled, glyphType, glyphTooltipIndex, glyphSpellID, icon = GetGlyph(i)
-        if enabled then
+        -- issue #2, player glyph for player at 22 reported as nil
+        if enabled and glyphSpellID ~= nil then
             logger:log_debug("glyph_id: ", glyphSpellID, "idx: ", glyphTooltipIndex)
             logger:log_debug(GetGlyphLink(i))
             self.known_glyphs[glyphSpellID] = glyphTooltipIndex
