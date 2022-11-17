@@ -10,9 +10,6 @@ function FM_CORE:OnLoad(addon)
     if addon ~= "FaceMelterWotlk" then
         return
     end
-end
-
-function FM_CORE:OnSpellsChange()
     local playerClass = player_information:GetClass()
     if self:IsClassSupported(playerClass) ~= true then
         UnregisterEvents()
@@ -23,6 +20,10 @@ function FM_CORE:OnSpellsChange()
         logger:log_info('loaded playerClass: ', playerClass,' player name: ', self:GetPlayerName())
         self:CreateUI()
     end
+end
+
+function FM_CORE:OnSpellsChange()
+
 end
 
 function FM_CORE:CreateUI()
@@ -45,6 +46,7 @@ function FM_CORE:ResetPlayerCastBar()
 end
 
 function FM_CORE:CreatePlayerCastBar()
+    logger:log_debug("FM_CORE:CreatePlayerCastBar()")
     local margin, button_size = 2, 40
     local spell_lib = fm_libs[player_information:GetClass()]
     local know_spells, spell_count = player_information:GetKnownSpells(spell_lib)
@@ -228,7 +230,8 @@ end
 
 function FM_CORE:HandlePlayerTalentUpdate()
     logger:log_debug('FM_CORE: updating player information for talent change')
-    player_information:OnSpecChange()
+    local spell_lib = fm_libs[player_information:GetClass()]
+    player_information:OnSpecChange(spell_lib)
     -- FM_CORE:HandleTargetChange()
     self:ResetPlayerCastBar()
     logger:log_info('spec changed. loaded playerClass: ', player_information:GetClass(),' player name: ', self:GetPlayerName())

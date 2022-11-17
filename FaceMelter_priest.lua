@@ -101,7 +101,7 @@ end
 
 
 local spell_vampiricTouch = {
-    spell_id     = 34917,
+    spell_id     = 48160,
 }
 -- spell_vampiricTouch: Checks if known and already there
 function spell_vampiricTouch:ChooseNext(player_information, target_information, current_spell_id)
@@ -209,6 +209,10 @@ function priest_lib:UpdateSetSpellCooldown(spell_id)
         self.spells_cd = {}
     end
 
+    if not self.spells_cd[spell_id] then
+        self.spells_cd = {}
+    end
+
     local _, gcd_duration, _, _ = GetSpellCooldown(61304)
 
     local current_cd = self.spells_cd[spell_id]
@@ -280,9 +284,15 @@ function priest_lib:LoadSpell(spell)
     end
     spell.priority = priority()
     local name, rank, icon, castTime, minRange, maxRange, spellId = GetSpellInfo(spell.spell_id)
+    local spellName, spellSubName, spellID = GetSpellBookItemName(name)
     spell.name = name
     spell.is_next = false
     spell.texture = GetSpellTexture(spell.spell_id)
+    if not spellID then
+        return
+    end
+
+    spell.spell_id = spellID
     self.spells[spell.priority] = spell
 end
 
@@ -351,18 +361,26 @@ function priest_lib:SpellCount(player_information)
     return count
 end
 
+function priest_lib:LoadSpells()
+    self:LoadSpell(spell_shadowWordPain)
+    self:LoadSpell(spell_vampiricTouch)
+    self:LoadSpell(spell_devouringPlague)
+    self:LoadSpell(spell_mindBlast)
+    -- priest_lib:LoadSpell(spell_shadowWordDeath)
+    -- priest_lib:LoadSpell(spell_vampiricEmpbrace)
+    self:LoadSpell(spell_mindFlay)
+    -- priest_lib:LoadSpell(spell_smite)
+end
+
+
+function priest_lib:ReloadSpells()
+    self.spells = {}
+    self:LoadSpells()
+end
 
 function RegisterPriest()
     priest_lib._name = "PRIEST"
-    priest_lib:LoadSpell(spell_shadowWordPain)
-    priest_lib:LoadSpell(spell_vampiricTouch)
-    priest_lib:LoadSpell(spell_devouringPlague)  
-    priest_lib:LoadSpell(spell_mindBlast)
-    -- priest_lib:LoadSpell(spell_shadowWordDeath)
-    -- priest_lib:LoadSpell(spell_vampiricEmpbrace)
-    priest_lib:LoadSpell(spell_mindFlay)
-    
-    -- priest_lib:LoadSpell(spell_smite)
+    priest_lib:LoadSpells()
     FM_CORE:RegisterClassLibrary(priest_lib)
 end
 

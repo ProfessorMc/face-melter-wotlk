@@ -56,7 +56,8 @@ function player_prototype:IsSpecChange()
     return self.spec == current_spec
 end
 
-function player_prototype:OnSpecChange()
+function player_prototype:OnSpecChange(spell_lib)
+    spell_lib:ReloadSpells()
     self:UpdateCharacter()
 end
 
@@ -178,6 +179,7 @@ function player_prototype:IsBaseSpellKnown(spell_id)
     end
     if not self.known_spells[spell_id] then
     local base_spell_id = FindBaseSpellByID(spell_id)
+        local name, rank, icon, castTime, minRange, maxRange, spellId = GetSpellInfo(spell_id)
         self.known_spells[spell_id] = IsSpellKnown(base_spell_id)
     end
     return self.known_spells[spell_id]
@@ -186,6 +188,7 @@ end
 function player_prototype:GetKnownSpells(spell_lib)
     local known_spells, count = {}, 0
     for _, spell in pairs(spell_lib:GetSpells()) do
+        logger:log_debug("spell: ", spell.spell_id)
         if self:IsBaseSpellKnown(spell.spell_id) then
             count = count + 1
             known_spells[count] = spell
